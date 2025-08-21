@@ -1,0 +1,56 @@
+
+
+
+export const data = [
+  { ciudad: "Albacete", km: 185 },
+  { ciudad: "Alicante", km: 185 },
+  { ciudad: "Almería", km: 376 },
+  { ciudad: "Ávila", km: 395 },
+  { ciudad: "Badajoz", km: 625 },
+  { ciudad: "Barcelona", km: 326 },
+  { ciudad: "Bilbao", km: 455 },
+  { ciudad: "Burgos", km: 485 },
+  { ciudad: "Cáceres", km: 565 },
+  { ciudad: "Cádiz", km: 670 },
+  { ciudad: "Castellón", km: 43 },
+  { ciudad: "Ciudad Real", km: 340 },
+  { ciudad: "Córdoba", km: 439 },
+  { ciudad: "La Coruña", km: 895 },
+  { ciudad: "Cuenca", km: 230 },
+  { ciudad: "Girona", km: 430 },
+  { ciudad: "Granada", km: 400 },
+  { ciudad: "Guadalajara", km: 310 },
+  { ciudad: "Huelva", km: 680 },
+  { ciudad: "Huesca", km: 310 },
+  { ciudad: "Jaén", km: 360 },
+  { ciudad: "León", km: 635 },
+  { ciudad: "Lleida", km: 315 },
+  { ciudad: "Logroño", km: 430 },
+  { ciudad: "Lugo", km: 850 },
+  { ciudad: "Madrid", km: 365 },
+  { ciudad: "Málaga", km: 490 },
+  { ciudad: "Murcia", km: 203 },
+  { ciudad: "Ourense", km: 820 },
+  { ciudad: "Oviedo", km: 620 },
+  { ciudad: "Palencia", km: 520 },
+  { ciudad: "Palma", km: 320 }, // en ferry o avión
+  { ciudad: "Las Palmas", km: 2100 }, // viaje mixto avión/ferry
+  { ciudad: "Pontevedra", km: 860 },
+  { ciudad: "Salamanca", km: 500 },
+  { ciudad: "San Sebastián", km: 480 },
+  { ciudad: "Santa Cruz de Tenerife", km: 2100 }, // vuelo/ferry
+  { ciudad: "Santander", km: 550 },
+  { ciudad: "Segovia", km: 395 },
+  { ciudad: "Sevilla", km: 559 },
+  { ciudad: "Soria", km: 390 },
+  { ciudad: "Tarragona", km: 270 },
+  { ciudad: "Teruel", km: 150 },
+  { ciudad: "Toledo", km: 370 },
+  { ciudad: "Valencia", km: 28 },
+  { ciudad: "Valladolid", km: 436 },
+  { ciudad: "Vitoria", km: 470 },
+  { ciudad: "Zamora", km: 570 },
+  { ciudad: "Zaragoza", km: 225 },
+  { ciudad: "puerto de Sagunto", km: 10 }, // ferry desde Algeciras
+  { ciudad: "Sagunto", km: 5 } // ferry desde Málaga o Motril
+];
