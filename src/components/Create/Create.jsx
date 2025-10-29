@@ -8,7 +8,7 @@ const BASEURL = process.env.NEXT_PUBLIC_BASEURL;
 function Create() {
   const [formData, setFormData] = useState({
     first_name: "",
-    last_name: "",
+
     email: "",
     phone_number: "",
     hire_date: "",
@@ -75,7 +75,7 @@ function Create() {
       // Limpiar formulario
       setFormData({
         first_name: "",
-        last_name: "",
+      
         email: "",
         phone_number: "",
         hire_date: "",
@@ -102,7 +102,7 @@ function Create() {
       >
         <h2 className="text-2xl font-bold mb-6 text-gray-800">Crear Solicitud</h2>
         <div className="grid md:grid-cols-2 gap-5">
-          {["first_name", "last_name", "email", "phone_number", "hire_date"].map((field) => (
+          {["first_name",  "email", "phone_number", "hire_date"].map((field) => (
             <div key={field}>
               <input
                 type={field === "hire_date" ? "date" : "text"}

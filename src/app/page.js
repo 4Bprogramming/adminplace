@@ -11,23 +11,23 @@ import AlertasDeCobro from "@/components/AlertaCobro/AlertasDeCobro";
 
 export default function Home() {
 
-  const [isAuthenticated, setIsAuthenticated] = useState(null); // null = aún cargando
-    const router = useRouter();
+  // const [isAuthenticated, setIsAuthenticated] = useState(null); // null = aún cargando
+  //   const router = useRouter();
   
-    useEffect(() => {
-      const usuario = localStorage.getItem("usuario");
+  //   useEffect(() => {
+  //     const usuario = localStorage.getItem("usuario");
   
-      if (!usuario) {
-        router.push("/login");
-      } else {
-        setIsAuthenticated(true);
-      }
-    }, [router]);
+  //     if (!usuario) {
+  //       router.push("/login"); 
+  //     } else {
+  //       setIsAuthenticated(true);
+  //     }
+  //   }, [router]);
   
-    if (isAuthenticated === null) {
-      // Puedes mostrar un loader mientras verifica
-      return <div className="text-center mt-10">Cargando...</div>;
-    }
+  //   if (isAuthenticated === null) {
+  //     // Puedes mostrar un loader mientras verifica
+  //     return <div className="text-center mt-10">Cargando...</div>;
+  //   }
   
   return (
     <div >

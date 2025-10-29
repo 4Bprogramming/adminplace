@@ -1,3 +1,5 @@
+"use client";
+
 import { useSearchParams } from "next/navigation";
 import { useState, useRef } from "react";
 import { PDFViewer, PDFDownloadLink } from "@react-pdf/renderer";
@@ -9,19 +11,39 @@ const BASEURL = process.env.NEXT_PUBLIC_BASEURL;
 function FacturaPage() {
   const searchParams = useSearchParams();
   const employeeId = searchParams.get("id");
-  const customerName = searchParams.get("name");
-  const travelCost = parseFloat(searchParams.get("salary"));
+  const customerNameFromURL = searchParams.get("name");
+  const initialTravelCost = parseFloat(searchParams.get("salary")) || 0;
   const email = searchParams.get("email");
-  const phone = searchParams.get("phone");
+  const phoneFromURL = searchParams.get("phone");
   const address = searchParams.get("address");
+
   const fileInputRef = useRef(null);
 
+  // Estado general
+  const [customerName, setCustomerName] = useState(customerNameFromURL || "");
+  const [phoneNumber, setPhoneNumber] = useState(phoneFromURL || "");
+  const [facturaId, setFacturaId] = useState(""); // <-- NUEVO
+
+  // ---------------------- COSTO DEL VIAJE ---------------------- //
+  const [includeTravelCost, setIncludeTravelCost] = useState(initialTravelCost > 0);
+  const [travelKm, setTravelKm] = useState(initialTravelCost / 0.5 || 0);
+  const travelCost = travelKm * 0.5;
+
+  // ---------------------- PRODUCTOS ---------------------- //
   const [items, setItems] = useState([]);
   const [newItem, setNewItem] = useState({ name: "", price: "", quantity: 1 });
   const [editIndex, setEditIndex] = useState(null);
   const [editItem, setEditItem] = useState({ name: "", price: "", quantity: 1 });
   const [importError, setImportError] = useState("");
 
+  // ---------------------- IVA Y DESCUENTO ---------------------- //
+  const [includeIVA, setIncludeIVA] = useState(false);
+  const [ivaRate, setIvaRate] = useState(21);
+
+  const [discountType, setDiscountType] = useState("none");
+  const [discountValue, setDiscountValue] = useState(0);
+
+  // ---------------------- MANEJO DE PRODUCTOS ---------------------- //
   const handleAddItem = () => {
     if (!newItem.name || !newItem.price) return;
     setItems([
@@ -42,408 +64,475 @@ function FacturaPage() {
   const handleEditClick = (index) => {
     setEditIndex(index);
     const item = items[index];
-    setEditItem({
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-    });
+    setEditItem({ ...item });
   };
 
   const handleSaveEdit = () => {
-    const updatedItems = [...items];
-    updatedItems[editIndex] = {
-      name: editItem.name,
+    const updated = [...items];
+    updated[editIndex] = {
+      ...editItem,
       price: parseFloat(editItem.price),
       quantity: parseInt(editItem.quantity),
     };
-    setItems(updatedItems);
+    setItems(updated);
     setEditIndex(null);
-    setEditItem({ name: "", price: "", quantity: 1 });
   };
 
-  // Función para manejar la importación desde Excel
+  // ---------------------- IMPORTAR EXCEL ---------------------- //
   const handleImportExcel = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
     setImportError("");
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const data = new Uint8Array(event.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        // Obtener la primera hoja
-        const worksheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[worksheetName];
-        
-        // Convertir a JSON
+        const workbook = XLSX.read(data, { type: "array" });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        
-        // Validar y procesar los datos
-        const importedItems = jsonData.map(row => {
-          // Buscar las columnas con nombres comunes
-          const name = row['Producto'] || row['Product'] || row['Nombre'] || row['Name'] || row['Descripción'] || row['Description'] || '';
-          const price = row['Precio'] || row['Price'] || row['Costo'] || row['Cost'] || row['Precio Unitario'] || 0;
-          const quantity = row['Cantidad'] || row['Quantity'] || row['Cant'] || row['Qty'] || 1;
-          
-          return {
-            name: String(name),
-            price: parseFloat(price) || 0,
-            quantity: parseInt(quantity) || 1
-          };
-        }).filter(item => item.name && item.price > 0);
-        
+
+        const importedItems = jsonData
+          .map((row) => ({
+            name:
+              row["Producto"] ||
+              row["Product"] ||
+              row["Nombre"] ||
+              row["Descripción"] ||
+              "",
+            price: parseFloat(
+              row["Precio"] || row["Price"] || row["Costo"] || 0
+            ),
+            quantity: parseInt(row["Cantidad"] || row["Quantity"] || 1),
+          }))
+          .filter((i) => i.name && i.price > 0);
+
         if (importedItems.length === 0) {
-          setImportError("No se pudieron importar items válidos desde el archivo. Por favor, verifique el formato.");
+          setImportError("No se encontraron productos válidos en el archivo.");
           return;
         }
-        
-        // Agregar los items importados a la lista existente
+
         setItems([...items, ...importedItems]);
-        
-        // Limpiar el input de archivo
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-        
-      } catch (error) {
-        console.error("Error al procesar el archivo Excel:", error);
-        setImportError("Error al procesar el archivo. Asegúrese de que es un archivo Excel válido.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } catch {
+        setImportError("Error procesando el archivo Excel.");
       }
     };
-    
-    reader.onerror = () => {
-      setImportError("Error al leer el archivo. Inténtelo de nuevo.");
-    };
-    
     reader.readAsArrayBuffer(file);
   };
 
-  // Función para descargar plantilla de Excel
-  const downloadTemplate = () => {
-    const templateData = [
-      ['Producto', 'Precio', 'Cantidad'],
-      ['Servicio de instalación', 150, 2],
-      ['Material eléctrico', 75.5, 1],
-      ['Mano de obra', 200, 3]
-    ];
-    
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(templateData);
-    
-    // Estilo para encabezados
-    for (let C = 0; C < 3; C++) {
-      const cellRef = XLSX.utils.encode_cell({r: 0, c: C});
-      if (!ws[cellRef]) ws[cellRef] = {};
-      if (!ws[cellRef].s) ws[cellRef].s = {};
-      ws[cellRef].s = { font: { bold: true } };
-    }
-    
-    // Ajustar ancho de columnas
-    ws['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 10 }];
-    
-    XLSX.utils.book_append_sheet(wb, ws, "Plantilla");
-    XLSX.writeFile(wb, "plantilla_factura.xlsx");
-  };
+  // ---------------------- CÁLCULOS ---------------------- //
+  const allItems = includeTravelCost
+    ? [{ name: "Costo del Viaje", price: travelCost, quantity: 1 }, ...items]
+    : items;
 
-  const total =
-    travelCost +
-    items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+
+  let discountAmount = 0;
+  if (discountType === "percent") {
+    discountAmount = (subtotal * discountValue) / 100;
+  } else if (discountType === "amount") {
+    discountAmount = discountValue;
+  }
+
+  const subtotalAfterDiscount = Math.max(subtotal - discountAmount, 0);
+  const ivaAmount = includeIVA ? (subtotalAfterDiscount * ivaRate) / 100 : 0;
+  const total = subtotalAfterDiscount + ivaAmount;
 
   const invoiceData = {
-    employee_id: employeeId,
+    factura_id: facturaId, // <-- NUEVO
     customerName,
+    phone: phoneNumber,
     email,
-    phone,
     address,
     date: new Date().toISOString().split("T")[0],
-    items: [
-      { name: "Costo del Viaje", price: travelCost, quantity: 1 },
-      ...items,
-    ],
+    items: allItems,
+    subtotal,
+    discountAmount,
+    discountType,
+    discountValue,
+    ivaRate,
+    ivaAmount,
     total,
   };
 
-  const handleEnviarFactura = async () => {
-    try {
-      const res = await fetch(`${BASEURL}/invoices`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(invoiceData),
-      });
-
-      const data = await res.json();
-      alert("Factura enviada al backend correctamente.");
-    } catch (error) {
-      console.error("Error enviando la factura:", error);
-      alert("Error al enviar la factura.");
-    }
-  };
-
-  // Función para descargar en Excel
+  // ---------------------- EXPORTAR A EXCEL ---------------------- //
   const handleDownloadExcel = () => {
-    const worksheetData = [
-      ["Factura", "", "", ""],
-      ["", "", "", ""],
-      ["Empresa: Char Fix", "", "", ""],
-      ["Dirección: Sagunto 46500", "", "", ""],
-      ["Email: info@charfix.com", "", "", ""],
-      ["Tel: (123) 456-7890", "", "", ""],
-      ["", "", "", ""],
-      ["Factura #: INV-2025-001", "", "", ""],
-      [`Fecha: ${invoiceData.date}`, "", "", ""],
-      ["", "", "", ""],
-      ["Facturado a:", "", "", ""],
-      [`Nombre: ${customerName}`, "", "", ""],
-      [`Email: ${email}`, "", "", ""],
-      [`Teléfono: ${phone}`, "", "", ""],
-      [`Dirección: ${address}`, "", "", ""],
+    const wsData = [
+      ["Factura ChairFix", "", "", ""],
+      ["Fecha:", invoiceData.date, "", ""],
+      ["Cliente:", customerName, "", ""],
+      ["Teléfono:", phoneNumber, "", ""],
       ["", "", "", ""],
       ["Productos/Servicios", "Cantidad", "Precio Unitario", "Total"],
     ];
 
-    invoiceData.items.forEach((item) => {
-      worksheetData.push([
-        item.name,
-        item.quantity,
-        `$${item.price.toFixed(2)}`,
-        `$${(item.price * item.quantity).toFixed(2)}`,
+    allItems.forEach((i) =>
+      wsData.push([
+        i.name,
+        i.quantity,
+        `${i.price.toFixed(2)} €`,
+        `${(i.price * i.quantity).toFixed(2)} €`,
+      ])
+    );
+
+    wsData.push(["", "", "Subtotal:", `${subtotal.toFixed(2)} €`]);
+
+    if (discountAmount > 0) {
+      wsData.push([
+        "",
+        "",
+        `Descuento ${discountType === "percent" ? `(${discountValue}%)` : ""}:`,
+        `-${discountAmount.toFixed(2)} €`,
       ]);
-    });
-
-    worksheetData.push(["", "", "TOTAL:", `$${total.toFixed(2)}`]);
-
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
-
-    const range = XLSX.utils.decode_range(ws["!ref"] || "A1:D1");
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      for (let R = range.s.r; R <= range.e.r; ++R) {
-        const cell_address = { c: C, r: R };
-        const cell_ref = XLSX.utils.encode_cell(cell_address);
-        
-        if (R === 0 || R === 16) {
-          if (!ws[cell_ref]) ws[cell_ref] = {};
-          if (!ws[cell_ref].s) ws[cell_ref].s = {};
-          ws[cell_ref].s = { font: { bold: true } };
-        }
-        
-        if (R === worksheetData.length - 1 && C >= 2) {
-          if (!ws[cell_ref]) ws[cell_ref] = {};
-          if (!ws[cell_ref].s) ws[cell_ref].s = {};
-          ws[cell_ref].s = { font: { bold: true } };
-        }
-      }
     }
 
-    ws["!cols"] = [{ wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
+    if (ivaAmount > 0) {
+      wsData.push(["", "", `IVA (${ivaRate}%):`, `${ivaAmount.toFixed(2)} €`]);
+    }
+
+    wsData.push(["", "", "TOTAL:", `${total.toFixed(2)} €`]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws["!cols"] = [{ wch: 35 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
     XLSX.utils.book_append_sheet(wb, ws, "Factura");
-    XLSX.writeFile(wb, `factura_${customerName}_${invoiceData.date}.xlsx`);
+    XLSX.writeFile(
+      wb,
+      `factura_${customerName || "nuevo"}_${invoiceData.date}.xlsx`
+    );
   };
 
+  // ---------------------- ENVIAR AL BACKEND ---------------------- //
+  const handleCreateInvoice = async () => {
+    try {
+      const response = await fetch(`${BASEURL}/invoices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(invoiceData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setFacturaId(data.factura_id || "");
+        alert(`Factura creada: ${data.factura_id || ""}`);
+      } else {
+        alert(`Error al crear factura: ${data.message}`);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error al conectar con el servidor");
+    }
+  };
+
+  // ---------------------- RENDER ---------------------- //
   return (
     <div className="p-6 space-y-4 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold">
-        Generar Factura para {customerName}
-      </h1>
+      <h1 className="text-2xl font-bold mb-2">Generar Factura</h1>
 
-      {/* Sección de Importación desde Excel */}
-      <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
-        <h2 className="font-semibold mb-2 text-blue-800">Importar desde Excel</h2>
-        <p className="text-sm text-blue-600 mb-3">
-          Importe múltiples productos desde un archivo Excel. 
-          <button 
-            onClick={downloadTemplate}
-            className="ml-2 text-blue-800 underline hover:text-blue-600"
-          >
-            Descargar plantilla
-          </button>
-        </p>
-        
-        <div className="flex flex-col sm:flex-row gap-2 items-start">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImportExcel}
-            accept=".xlsx, .xls, .csv"
-            className="border p-2 rounded w-full text-sm"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="bg-blue-500 text-white px-4 py-2 rounded text-sm whitespace-nowrap"
-          >
-            Seleccionar Archivo
-          </button>
-        </div>
-        
-        {importError && (
-          <div className="mt-2 text-red-500 text-sm">{importError}</div>
-        )}
-        
-        <div className="mt-2 text-xs text-gray-500">
-          <p>Formato esperado: columnas con "Producto", "Precio" y "Cantidad".</p>
-          <p>También se aceptan nombres similares en español o inglés.</p>
-        </div>
-      </div>
+      {/* Botón para enviar al backend */}
+      <button
+        onClick={handleCreateInvoice}
+        className="px-3 py-2 bg-purple-600 rounded text-white mb-2"
+      >
+        Crear Factura en el Backend
+      </button>
 
-      {/* Agregar Producto manualmente */}
-      <div>
-        <h2 className="font-semibold mb-2">Agregar Producto Manualmente</h2>
-        <div className="flex flex-col sm:flex-row gap-2">
+      {/* Datos del cliente */}
+      {!customerNameFromURL && (
+        <div className="border p-4 rounded-md bg-gray-50">
+          <h2 className="font-semibold mb-2">Datos del nuevo cliente</h2>
           <input
             type="text"
-            placeholder="Nombre del producto"
+            placeholder="Nombre del cliente"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            className="border p-2 w-full mb-2 rounded"
+          />
+          <input
+            type="text"
+            placeholder="Teléfono del cliente"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            className="border p-2 w-full rounded"
+          />
+        </div>
+      )}
+
+      {/* Costo del viaje */}
+      <div className="border p-4 rounded-md bg-gray-50">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={includeTravelCost}
+            onChange={(e) => setIncludeTravelCost(e.target.checked)}
+          />
+          <span>Incluir costo de viaje</span>
+        </label>
+
+        {includeTravelCost && (
+          <div className="mt-2">
+            <input
+              type="number"
+              placeholder="Kilómetros recorridos"
+              value={travelKm}
+              onChange={(e) => setTravelKm(parseFloat(e.target.value) || 0)}
+              className="border p-2 w-full sm:w-40 rounded"
+            />
+            <p className="mt-1">Costo calculado: €{travelCost.toFixed(2)}</p>
+          </div>
+        )}
+      </div>
+
+      {/* IVA */}
+      <div className="border p-4 rounded-md bg-gray-50">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={includeIVA}
+            onChange={(e) => setIncludeIVA(e.target.checked)}
+          />
+          <span>Incluir IVA</span>
+        </label>
+
+        {includeIVA && (
+          <div className="mt-2">
+            <label className="block text-sm font-medium mb-1">
+              Porcentaje de IVA (%)
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={ivaRate}
+              onChange={(e) => setIvaRate(parseFloat(e.target.value) || 0)}
+              className="border p-2 w-full sm:w-32 rounded"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* DESCUENTO */}
+      <div className="border p-4 rounded-md bg-gray-50">
+        <h2 className="font-semibold mb-2">Descuento</h2>
+
+        <div className="flex items-center gap-4 mb-2">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="discountType"
+              checked={discountType === "none"}
+              onChange={() => setDiscountType("none")}
+            />
+            <span>Sin descuento</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="discountType"
+              checked={discountType === "percent"}
+              onChange={() => setDiscountType("percent")}
+            />
+            <span>Porcentaje (%)</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="discountType"
+              checked={discountType === "amount"}
+              onChange={() => setDiscountType("amount")}
+            />
+            <span>Monto fijo (€)</span>
+          </label>
+        </div>
+
+        {discountType !== "none" && (
+          <div>
+            <input
+              type="number"
+              placeholder={discountType === "percent" ? "Descuento (%)" : "Descuento (€)"}
+              value={discountValue}
+              onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+              className="border p-2 w-full sm:w-40 rounded"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Importar Excel */}
+      <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
+        <h2 className="font-semibold mb-2 text-blue-800">Importar desde Excel</h2>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleImportExcel}
+          accept=".xlsx, .xls, .csv"
+          className="border p-2 rounded w-full text-sm"
+        />
+        {importError && <p className="text-red-600 mt-1">{importError}</p>}
+      </div>
+
+      {/* Agregar nuevo producto */}
+      <div className="border p-4 rounded-md bg-gray-50">
+        <h2 className="font-semibold mb-2">Agregar nuevo producto/servicio</h2>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="text"
+            placeholder="Nombre"
             value={newItem.name}
             onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-            className="border p-2 w-full"
+            className="border p-2 rounded flex-1 min-w-[150px]"
           />
           <input
             type="number"
             placeholder="Precio"
             value={newItem.price}
             onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-            className="border p-2 w-full sm:w-32"
+            className="border p-2 rounded w-24"
           />
           <input
             type="number"
             placeholder="Cantidad"
             value={newItem.quantity}
-            onChange={(e) =>
-              setNewItem({ ...newItem, quantity: e.target.value })
-            }
-            className="border p-2 w-full sm:w-20"
+            min="1"
+            onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
+            className="border p-2 rounded w-20"
           />
           <button
             onClick={handleAddItem}
-            className="bg-blue-500 text-white px-4 py-2 rounded w-full sm:w-auto"
+            className="bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600"
           >
-            Añadir
+            Agregar
           </button>
         </div>
       </div>
 
-      {/* Lista de Productos */}
-      {items.length > 0 && (
-        <div>
-          <h2 className="font-semibold mt-4">Productos ({items.length})</h2>
-          <ul className="space-y-2">
-            {items.map((item, index) => (
-              <li
-                key={index}
-                className="flex flex-col sm:flex-row justify-between items-start sm:items-center border p-2 rounded gap-2"
+      {/* Lista de productos */}
+      <div className="border p-4 rounded-md bg-gray-50">
+        <h2 className="font-semibold mb-2">Productos/Servicios</h2>
+        {allItems.length === 0 ? (
+          <p>No hay productos agregados.</p>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-1">Nombre</th>
+                <th className="p-1">Cantidad</th>
+                <th className="p-1">Precio</th>
+                <th className="p-1">Total</th>
+                <th className="p-1">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allItems.map((i, idx) => (
+                <tr key={idx} className="border-b">
+                  <td className="p-1">{i.name}</td>
+                  <td className="p-1 text-center">{i.quantity}</td>
+                  <td className="p-1 text-center">{i.price.toFixed(2)} €</td>
+                  <td className="p-1 text-center">
+                    {(i.price * i.quantity).toFixed(2)} €
+                  </td>
+                  <td className="p-1 text-center">
+                    {i.name !== "Costo del Viaje" && (
+                      <>
+                        <button
+                          onClick={() => handleEditClick(idx)}
+                          className="text-blue-600 mr-2"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleRemoveItem(idx)}
+                          className="text-red-600"
+                        >
+                          Eliminar
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Modal edición */}
+      {editIndex !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-4 rounded-md w-96">
+            <h2 className="font-semibold mb-2">Editar Producto</h2>
+            <input
+              type="text"
+              value={editItem.name}
+              onChange={(e) => setEditItem({ ...editItem, name: e.target.value })}
+              className="border p-2 w-full mb-2 rounded"
+            />
+            <input
+              type="number"
+              value={editItem.price}
+              onChange={(e) => setEditItem({ ...editItem, price: e.target.value })}
+              className="border p-2 w-full mb-2 rounded"
+            />
+            <input
+              type="number"
+              value={editItem.quantity}
+              min="1"
+              onChange={(e) => setEditItem({ ...editItem, quantity: e.target.value })}
+              className="border p-2 w-full mb-2 rounded"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditIndex(null)}
+                className="px-3 py-2 rounded border"
               >
-                {editIndex === index ? (
-                  // Modo edición
-                  <div className="flex flex-col sm:flex-row gap-2 w-full">
-                    <input
-                      type="text"
-                      value={editItem.name}
-                      onChange={(e) =>
-                        setEditItem({ ...editItem, name: e.target.value })
-                      }
-                      className="border p-1 w-full"
-                    />
-                    <input
-                      type="number"
-                      value={editItem.price}
-                      onChange={(e) =>
-                        setEditItem({ ...editItem, price: e.target.value })
-                      }
-                      className="border p-1 w-full sm:w-24"
-                    />
-                    <input
-                      type="number"
-                      value={editItem.quantity}
-                      onChange={(e) =>
-                        setEditItem({ ...editItem, quantity: e.target.value })
-                      }
-                      className="border p-1 w-full sm:w-20"
-                    />
-                    <button
-                      onClick={handleSaveEdit}
-                      className="bg-green-500 text-white px-3 py-1 rounded"
-                    >
-                      Guardar
-                    </button>
-                  </div>
-                ) : (
-                  // Modo normal
-                  <>
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p>
-                        Cantidad: {item.quantity} | Precio: ${item.price.toFixed(2)} | Total: ${(item.price * item.quantity).toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditClick(index)}
-                        className="bg-yellow-500 text-white px-3 py-1 rounded"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => handleRemoveItem(index)}
-                        className="bg-red-500 text-white px-3 py-1 rounded"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-          
-          {/* <div className="mt-4 p-3 bg-gray-50 rounded-md border">
-            <p className="font-semibold">Resumen:</p>
-            <p>Productos/Servicios: {items.length}</p>
-            <p>Subtotal productos: ${(total - travelCost).toFixed(2)}</p>
-            <p>Costo del viaje: ${travelCost.toFixed(2)}</p>
-            <p className="text-lg font-bold mt-2">TOTAL: ${total.toFixed(2)}</p>
-          </div> */}
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="px-3 py-2 rounded bg-blue-600 text-white"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Vista Previa PDF */}
-      <div>
-        <h2 className="font-semibold mt-4">Vista Previa de Factura</h2>
-        <PDFViewer width="100%" height="400px">
+      {/* PDF Viewer */}
+      <div className="border p-4 rounded-md bg-gray-50">
+        <h2 className="font-semibold mb-2">Vista previa PDF</h2>
+        <PDFViewer style={{ width: "100%", height: "400px" }}>
           <Factura invoiceData={invoiceData} />
         </PDFViewer>
-
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="flex gap-2 mt-2">
           <PDFDownloadLink
             document={<Factura invoiceData={invoiceData} />}
-            fileName="factura.pdf"
+            fileName={`factura_${customerName || "nuevo"}_${invoiceData.date}.pdf`}
           >
-            {({ loading }) => (
-              <button className="bg-green-500 text-white px-4 py-2 rounded">
-                {loading ? "Generando..." : "Descargar PDF"}
-              </button>
-            )}
+            {({ loading }) =>
+              loading ? (
+                <button className="px-3 py-2 bg-gray-400 rounded text-white">
+                  Cargando...
+                </button>
+              ) : (
+                <button className="px-3 py-2 bg-blue-600 rounded text-white">
+                  Descargar PDF
+                </button>
+              )
+            }
           </PDFDownloadLink>
-          
+
           <button
             onClick={handleDownloadExcel}
-            className="bg-blue-500 text-white px-4 py-2 rounded"
+            className="px-3 py-2 bg-green-600 rounded text-white"
           >
             Descargar Excel
           </button>
         </div>
       </div>
-
-      {/* Enviar al backend */}
-      <button
-        onClick={handleEnviarFactura}
-        className="bg-black text-white px-4 py-2 rounded"
-      >
-        Enviar al Backend
-      </button>
     </div>
   );
 }

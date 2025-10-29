@@ -6,26 +6,26 @@ import { useRouter } from "next/navigation";
 import Cuotas from '@/components/Calendar/Cuotas';
 
 function Page() {
-  const [isAuthenticated, setIsAuthenticated] = useState(null);
-  const router = useRouter();
+  // const [isAuthenticated, setIsAuthenticated] = useState(null);
+  // const router = useRouter();
 
-  useEffect(() => {
-    const usuario = localStorage.getItem("usuario");
+  // useEffect(() => {
+  //   const usuario = localStorage.getItem("usuario");
 
-    if (!usuario) {
-      router.push("/login");
-    } else {
-      setIsAuthenticated(true);
-    }
-  }, [router]);
+  //   if (!usuario) {
+  //     router.push("/login");
+  //   } else {
+  //     setIsAuthenticated(true);
+  //   }
+  // }, [router]);
 
-  if (isAuthenticated === null) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="text-gray-600 text-lg">Cargando...</div>
-      </div>
-    );
-  }
+  // if (isAuthenticated === null) {
+  //   return (
+  //     <div className="flex justify-center items-center h-screen">
+  //       <div className="text-gray-600 text-lg">Cargando...</div>
+  //     </div>
+  //   );
+  // }
 
   const manejarFechaSeleccionada = (fecha) => {
     console.log('Fecha seleccionada:', fecha);
