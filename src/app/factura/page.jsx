@@ -1,5 +1,5 @@
 "use client";
-import FacturaPage from '@/components/Pdf/FacturaPage';
+import FacturaPage from '@/components/Pdf/FacturaPage2';
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 

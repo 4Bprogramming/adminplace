@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useState, useRef } from "react";
-import { PDFViewer, PDFDownloadLink } from "@react-pdf/renderer";
+import { PDFViewer, PDFDownloadLink, pdf } from "@react-pdf/renderer";
 import Factura from "./Factura";
 import * as XLSX from "xlsx";
 
@@ -22,7 +22,8 @@ function FacturaPage() {
   // Estado general
   const [customerName, setCustomerName] = useState(customerNameFromURL || "");
   const [phoneNumber, setPhoneNumber] = useState(phoneFromURL || "");
-  const [facturaId, setFacturaId] = useState(""); // <-- NUEVO
+  const [facturaId, setFacturaId] = useState("");
+  const [pdfUrl, setPdfUrl] = useState(""); // <-- NUEVO: Para guardar la URL de Cloudinary
 
   // ---------------------- COSTO DEL VIAJE ---------------------- //
   const [includeTravelCost, setIncludeTravelCost] = useState(initialTravelCost > 0);
@@ -140,7 +141,7 @@ function FacturaPage() {
   const total = subtotalAfterDiscount + ivaAmount;
 
   const invoiceData = {
-    factura_id: facturaId, // <-- NUEVO
+    factura_id: facturaId,
     customerName,
     phone: phoneNumber,
     email,
@@ -154,7 +155,138 @@ function FacturaPage() {
     ivaRate,
     ivaAmount,
     total,
+    pdfUrl, // <-- NUEVO: Incluir la URL del PDF
   };
+
+  // ---------------------- FUNCIÓN PARA SUBIR PDF A CLOUDINARY ---------------------- //
+   const uploadPdfToCloudinary = async (pdfBlob) => {
+  try {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = 'next_cloudinary_app';
+    
+     // ✅ NOMBRE DEL ARCHIVO CON EXTENSIÓN
+    const fileName = `factura_${customerName || "nuevo"}_${invoiceData.date}.pdf`;
+
+    const formData = new FormData();
+    formData.append('file', pdfBlob);
+    formData.append('upload_preset', uploadPreset);
+    formData.append('resource_type', 'raw');
+    formData.append('public_id', fileName); // ✅ PUBLIC_ID CON .PDF
+    // ✅ FORZAR QUE SE GUARDE COMO PDF
+    // formData.append('filename', `factura_${customerName || "nuevo"}_${invoiceData.date}.pdf`);
+
+    console.log('📤 Subiendo PDF...');
+
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    const data = await response.json();
+    
+    if (data.secure_url) {
+      // ✅ URL DE DESCARGA QUE FORZA EL NOMBRE
+      const downloadUrl = `${data.secure_url}/fl_attachment:${fileName}`;
+      
+      setPdfUrl(downloadUrl);
+      console.log("✅ PDF subido exitosamente:");
+      console.log("🔗 URL Cloudinary:", data.secure_url);
+      console.log("📥 URL Descarga:", downloadUrl);
+      
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: "success",
+          title: "PDF subido",
+          html: `
+            <div>
+              <p>El PDF se ha subido correctamente a Cloudinary.</p>
+              <a href="${downloadUrl}" target="_blank" class="underline text-blue-600">
+                Descargar PDF
+              </a>
+            </div>
+          `,
+          timer: 3000,
+        });
+      }
+      
+      return downloadUrl;
+    } else {
+      throw new Error(data.error?.message || 'Error de Cloudinary');
+    }
+  } catch (error) {
+    console.error('❌ Error subiendo PDF a Cloudinary:', error);
+    
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo subir el PDF a Cloudinary: " + error.message,
+        timer: 3000,
+      });
+    }
+    
+    return null;
+  }
+};
+
+  // ---------------------- FUNCIÓN PARA GENERAR Y SUBIR PDF ---------------------- //
+  const handleDownloadAndUpload = async () => {
+    try {
+      console.log('🔄 Generando PDF...');
+      
+      // Generar el PDF como Blob
+      const pdfInstance = <Factura invoiceData={invoiceData} />;
+      const blob = await pdf(pdfInstance).toBlob();
+      
+      console.log('📄 PDF generado, tamaño:', blob.size, 'bytes');
+      
+      // Crear URL temporal para descarga
+      const url = URL.createObjectURL(blob);
+      
+      // Crear enlace de descarga
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `factura_${customerName || "nuevo"}_${invoiceData.date}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Liberar URL
+      URL.revokeObjectURL(url);
+      
+      console.log('📥 PDF descargado localmente');
+      
+      // Subir a Cloudinary
+      console.log('☁️ Subiendo a Cloudinary...');
+      const cloudinaryUrl = await uploadPdfToCloudinary(blob);
+      
+      if (cloudinaryUrl) {
+        console.log('🎉 Proceso completado exitosamente');
+        console.log('🔗 URL de Cloudinary:', cloudinaryUrl);
+      }
+      
+    } catch (error) {
+      console.error('💥 Error en el proceso completo:', error);
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Hubo un problema al generar o subir el PDF.",
+          timer: 3000,
+        });
+      }
+    }
+  };
+
+ 
+
+
+
+
+
+
+
+
 
   // ---------------------- EXPORTAR A EXCEL ---------------------- //
   const handleDownloadExcel = () => {
@@ -206,13 +338,22 @@ function FacturaPage() {
   // ---------------------- ENVIAR AL BACKEND ---------------------- //
   const handleCreateInvoice = async () => {
     try {
+      // Actualizar invoiceData con la URL del PDF si está disponible
+      const invoiceDataWithPdf = {
+        ...invoiceData,
+        pdfUrl: pdfUrl || null
+      };
+
+      console.log("Datos enviados al backend:", JSON.stringify(invoiceDataWithPdf));
+
       const response = await fetch(`${BASEURL}/invoices`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(invoiceData),
+        body: JSON.stringify(invoiceDataWithPdf),
       });
 
       const data = await response.json();
+      console.log("Respuesta del backend:", data);
 
       if (response.ok) {
         setFacturaId(data.factura_id || "");
@@ -230,6 +371,18 @@ function FacturaPage() {
   return (
     <div className="p-6 space-y-4 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-2">Generar Factura</h1>
+
+      {/* Mostrar URL del PDF si está disponible */}
+      {pdfUrl && (
+        <div className="bg-green-50 p-3 rounded-md border border-green-200">
+          <p className="text-green-800 text-sm">
+            <strong>PDF guardado en:</strong> 
+            <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="underline ml-2">
+              Ver PDF en Cloudinary
+            </a>
+          </p>
+        </div>
+      )}
 
       {/* Botón para enviar al backend */}
       <button
@@ -505,54 +658,19 @@ function FacturaPage() {
       <div className="border p-4 rounded-md bg-gray-50">
         <h2 className="font-semibold mb-2">Vista previa PDF</h2>
 
-        
-
         <PDFViewer style={{ width: "100%", height: "400px" }}>
           <Factura invoiceData={invoiceData} />
         </PDFViewer>
+        
         <div className="flex gap-2 mt-2">
-          <CldUploadWidget
-        uploadPreset="next_cloudinary_app"
-        options={{
-          sources: ["local"],
-          multiple: false,
-          maxFiles: 1,
-          resourceType: "raw"
-        }}
-        onQueuesEnd={(result) => {
-          const uploaded = result?.info?.files?.[0]?.uploadInfo;
-          if (uploaded?.secure_url) {
-            const pdfUrl = uploaded.secure_url;
-            console.log("✅ PDF subido:", pdfUrl);
-            setFormData((prev) => ({ ...prev, pdfUrl: pdfUrl }));
-            
-            Swal.fire({
-              icon: "success",
-              title: "PDF subido",
-              text: "El PDF se ha subido correctamente.",
-              timer: 1500,
-              showConfirmButton: false,
-            });
-          }
-        }}
-      >
-          <PDFDownloadLink
-            document={<Factura invoiceData={invoiceData} />}
-            fileName={`factura_${customerName || "nuevo"}_${invoiceData.date}.pdf`}
+          {/* Botón que descarga y sube automáticamente */}
+          <button
+            onClick={handleDownloadAndUpload}
+            className="px-3 py-2 bg-blue-600 rounded text-white"
           >
-            {({ loading }) =>
-              loading ? (
-                <button className="px-3 py-2 bg-gray-400 rounded text-white">
-                  Cargando...
-                </button>
-              ) : (
-                <button className="px-3 py-2 bg-blue-600 rounded text-white">
-                  Descargar PDF
-                </button>
-              )
-            }
-          </PDFDownloadLink>
-            </CldUploadWidget>
+            Descargar y Subir PDF
+          </button>
+
           <button
             onClick={handleDownloadExcel}
             className="px-3 py-2 bg-green-600 rounded text-white"

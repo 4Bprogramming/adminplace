@@ -34,6 +34,8 @@ export default function PhotoForm() {
 
     setLoading(true);
     try {
+
+      console.log("Enviando datos al backend:", JSON.stringify(formData));
       const res = await fetch(`${BASEURL}/photo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -41,6 +43,7 @@ export default function PhotoForm() {
       });
 
       const data = await res.json();
+      console.log("Respuesta del backend:", data);
 
       if (!res.ok) {
         Swal.fire({
